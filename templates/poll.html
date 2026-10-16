@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block heading %}{{ p.title }}{% endblock %}
+{% block subheading %}Poll code <b class="gradient-text">{{ p.code }}</b> · results refresh live every 2 seconds{% endblock %}
+{% block head %}
+<style>
+.opt{position:relative;padding:16px 18px;border-radius:16px;border:1px solid var(--border);margin-bottom:12px;cursor:pointer;overflow:hidden;transition:.25s;background:var(--card)}
+.opt:hover{border-color:var(--a1);transform:translateX(4px)}
+.opt .fill{position:absolute;inset:0;width:0;background:linear-gradient(90deg,color-mix(in srgb,var(--a1) 30%,transparent),color-mix(in srgb,var(--a2) 25%,transparent));transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.opt .oc{position:relative;display:flex;align-items:center;gap:12px}
+.opt.sel{border-color:var(--a1);box-shadow:0 0 0 3px color-mix(in srgb,var(--a1) 30%,transparent)}
+.opt.leader .pct::after{content:" 👑"}
+.opt .pct{margin-left:auto;font-weight:700;font-size:18px}
+.disabled .opt{cursor:default}.disabled .opt:hover{transform:none}
+.block-item{display:flex;gap:12px;align-items:center;padding:10px;border-radius:12px;font-size:13px;animation:pop .5s}
+.block-item .cube{width:38px;height:38px;border-radius:10px;background:var(--grad);display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}
+.countdown{display:flex;gap:10px}.countdown div{background:var(--input);border:1px solid var(--border);border-radius:14px;padding:10px 14px;text-align:center;min-width:64px}
+.countdown b{font-size:24px;display:block;font-variant-numeric:tabular-nums}.countdown span{font-size:11px;color:var(--muted)}
+.mining{display:none;align-items:center;gap:10px;justify-content:center;padding:14px;border-radius:14px;background:var(--input);margin-top:10px}
+</style>
+{% endblock %}
+{% block topbar_extra %}<button class="btn btn-ghost btn-sm" id="share"><i class="bi bi-share"></i> Share</button>
+<a class="btn btn-ghost btn-sm" href="{{ url_for('explorer', code=p.code) }}"><i class="bi bi-boxes"></i> Explorer</a>{% endblock %}
+{% block content %}
+<div class="grid g-2-1">
+  <div class="card glow fade-up">
+    {% if p.description %}<p class="muted mb">{{ p.description }}</p>{% endif %}
+    <div class="row between mb"><span id="pollStatus"></span><span class="muted small"><b id="total">{{ r.total }}</b> votes · chain height <b id="height">{{ r.height }}</b></span></div>
+    <div id="options" class="{{ 'disabled' if r.voted or r.ended }}">
+      {% for o in p.options %}<div class="opt" data-i="{{ loop.index0 }}"><div class="fill"></div><div class="oc">
+        <span class="badge accent">{{ loop.index }}</span><b>{{ o }}</b><span class="muted small cnt"></span><span class="pct">0%</span></div></div>{% endfor %}
+    </div>
+    <div class="mining" id="mining"><i class="bi bi-gear-wide-connected spin" style="font-size:22px;color:var(--a1)"></i> Mining your ballot block (difficulty {{ 3 }})…</div>
+    <div id="receipt" class="mt"></div>
+    {% if p.creator_id == user.id and not r.ended %}<button class="btn btn-ghost btn-sm mt" id="closeBtn"><i class="bi bi-lock"></i> Close voting now</button>{% endif %}
+  </div>
+  <div class="grid">
+    <div class="card fade-up"><h3><i class="bi bi-hourglass-split"></i> <span id="cdLabel">Time remaining</span></h3>
+      <div class="countdown" id="cd"><div><b id="d">0</b><span>days</span></div><div><b id="h">0</b><span>hours</span></div><div><b id="m">0</b><span>min</span></div><div><b id="s">0</b><span>sec</span></div></div></div>
+    <div class="card fade-up"><h3><i class="bi bi-pie-chart"></i> Distribution</h3><div style="height:220px"><canvas id="pie"></canvas></div></div>
+    <div class="card fade-up"><h3><i class="bi bi-activity"></i> Latest blocks <span class="act live">Live</span></h3><div id="blocks"></div></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const CODE = "{{ p.code }}", OPTS = {{ p.options|tojson }}, END = new Date("{{ p.ends_at }}".replace(' ', 'T'));
+const agoTxt = d => d < 60 ? 'just now' : d < 3600 ? Math.floor(d / 60) + 'm ago' : d < 86400 ? Math.floor(d / 3600) + 'h ago' : Math.floor(d / 86400) + 'd ago';
+let state = {{ r|tojson }}, chart, lastHeight = state.height;
+function draw() { chart && chart.destroy(); applyChartDefaults(); const c = chartColors();
+  chart = new Chart(pie, {type: 'doughnut', data: {labels: OPTS, datasets: [{data: state.counts, backgroundColor: c.palette, borderWidth: 0, hoverOffset: 12}]},
+    options: {maintainAspectRatio: false, cutout: '62%', plugins: {legend: {position: 'bottom', labels: {boxWidth: 8, font: {size: 11}}}}}}); }
+function render() {
+  const mx = Math.max(...state.counts);
+  document.querySelectorAll('.opt').forEach((o, i) => { o.querySelector('.fill').style.width = state.pct[i] + '%'; o.querySelector('.pct').textContent = state.pct[i] + '%';
+    o.querySelector('.cnt').textContent = state.counts[i] + ' votes'; o.classList.toggle('leader', mx > 0 && state.counts[i] === mx); });
+  total.textContent = state.total; height.textContent = state.height;
+  pollStatus.innerHTML = state.ended ? '<span class="badge danger"><i class="bi bi-lock"></i> Voting closed</span>' : state.voted ? '<span class="badge success"><i class="bi bi-check2-circle"></i> Your vote is on-chain</span>' : '<span class="badge accent"><i class="bi bi-hand-index"></i> Tap an option to vote</span>';
+  pollStatus.innerHTML += state.valid ? ' <span class="badge success"><i class="bi bi-shield-check"></i> Chain valid</span>' : ' <span class="badge danger"><i class="bi bi-shield-x"></i> Chain tampered!</span>';
+  blocks.innerHTML = state.recent.map(b => `<div class="block-item"><div class="cube">#${b.idx}</div><div style="flex:1"><code>${b.hash}…</code><div class="muted">nonce ${b.nonce.toLocaleString()} · ${b.mine_ms ? b.mine_ms.toFixed(1) + ' ms' : ''} · ${agoTxt(b.ago)}</div></div></div>`).join('');
+  if (chart) { chart.data.datasets[0].data = state.counts; chart.update(); }
+  if (state.voted || state.ended) document.getElementById('options').classList.add('disabled');
+}
+async function poll() { const r = await api('/api/poll/' + CODE).catch(() => null); if (!r) return;
+  if (r.height > lastHeight && lastHeight) toast(`New vote mined in block #${r.height - 1} ⛓️`, 'info', 2200); lastHeight = r.height; state = r; render(); }
+document.getElementById('options').addEventListener('click', async e => {
+  const o = e.target.closest('.opt'); if (!o || state.voted || state.ended) return;
+  if (!confirm(`Cast your vote for “${OPTS[o.dataset.i]}”? This cannot be changed.`)) return;
+  o.classList.add('sel'); mining.style.display = 'flex';
+  try { const r = await api(`/api/poll/${CODE}/vote`, {body: {choice: +o.dataset.i}});
+    receipt.innerHTML = `<div class="card pop" style="padding:14px"><b><i class="bi bi-receipt"></i> Vote receipt</b><div class="small muted">Block #${r.block.idx} · nonce ${r.block.nonce.toLocaleString()} · mined in ${r.block.mine_ms} ms</div><code class="small">${r.block.hash}</code></div>`;
+    toast('Vote recorded on the blockchain ✅', 'success'); await poll(); } finally { mining.style.display = 'none'; }
+});
+document.getElementById('closeBtn')?.addEventListener('click', async () => { if (confirm('Close voting now?')) { await api(`/api/poll/${CODE}/close`, {method: 'POST'}); toast('Poll closed', 'info'); poll(); } });
+share.onclick = async () => { const url = location.href; try { await navigator.clipboard.writeText(url); toast('Poll link copied — code ' + CODE, 'success'); } catch (e) { prompt('Share this link', url); } };
+const tickCd = () => { let t = Math.max(0, (END - Date.now()) / 1000); if (!t) cdLabel.textContent = 'Voting has ended';
+  d.textContent = Math.floor(t / 86400); h.textContent = Math.floor(t % 86400 / 3600); m.textContent = Math.floor(t % 3600 / 60); s.textContent = Math.floor(t % 60); };
+tickCd(); setInterval(tickCd, 1000); draw(); render(); setInterval(poll, 2000); addEventListener('themechange', draw);
+</script>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block subheading %}Vote on live polls or create your own — every ballot is a block{% endblock %}
+{% block topbar_extra %}<a class="btn btn-primary btn-sm" href="{{ url_for('create') }}"><i class="bi bi-plus-lg"></i> New poll</a>{% endblock %}
+{% block content %}
+<div class="grid g4 mb">
+  <div class="card hover fade-up"><div class="stat"><div class="ico"><i class="bi bi-collection"></i></div><div><div class="lbl">Polls</div><div class="val" data-count="{{ st.polls }}">0</div></div></div></div>
+  <div class="card hover fade-up"><div class="stat"><div class="ico c3"><i class="bi bi-broadcast"></i></div><div><div class="lbl">Active now</div><div class="val" data-count="{{ st.active }}">0</div></div></div></div>
+  <div class="card hover fade-up"><div class="stat"><div class="ico c5"><i class="bi bi-check2-square"></i></div><div><div class="lbl">Votes cast</div><div class="val" data-count="{{ st.votes }}">0</div></div></div></div>
+  <div class="card hover fade-up"><div class="stat"><div class="ico c4"><i class="bi bi-boxes"></i></div><div><div class="lbl">Blocks mined</div><div class="val" data-count="{{ st.blocks }}">0</div></div></div></div>
+</div>
+<form class="card glow fade-up mb row" method="post" action="{{ url_for('join') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <i class="bi bi-key" style="font-size:22px;color:var(--a1)"></i><b>Have a poll code?</b>
+  <input class="input" name="code" maxlength="6" placeholder="e.g. 7KQ2ZD" style="max-width:200px;text-transform:uppercase;letter-spacing:3px;font-weight:600">
+  <button class="btn btn-primary"><i class="bi bi-arrow-right-circle"></i> Join</button>
+</form>
+<div class="grid g3" id="pollGrid">
+  {% for r in rows %}
+  {% set top = r.options|length %}
+  <a class="card hover fade-up poll-card" href="{{ url_for('poll', code=r.code) }}" data-text="{{ r.title|lower }}">
+    <div class="row between"><span class="badge {{ 'danger' if r.ended else 'success' }}">{% if r.ended %}<i class="bi bi-lock"></i> Closed{% else %}<span class="live" style="color:inherit">Live</span>{% endif %}</span>
+      <span class="badge"><i class="bi bi-hash"></i>{{ r.code }}</span></div>
+    <h3 class="mt" style="font-size:17px">{{ r.title }}</h3>
+    <div class="row small muted"><span><i class="bi bi-list-ul"></i> {{ top }} options</span><span><i class="bi bi-people"></i> {{ r.votes }} votes</span></div>
+    <div class="row small muted mt"><span><i class="bi bi-person"></i> {{ r.creator }}</span><span style="margin-left:auto" class="cd" data-end="{{ r.ends_at }}"></span></div>
+  </a>
+  {% else %}<div class="card empty"><i class="bi bi-inbox"></i>No polls yet — create the first one!</div>{% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const cd = () => document.querySelectorAll('.cd').forEach(el => { const s = (new Date(el.dataset.end.replace(' ', 'T')) - Date.now()) / 1000;
+  el.innerHTML = s <= 0 ? '<i class="bi bi-flag"></i> Ended' : `<i class="bi bi-hourglass-split"></i> ${s > 86400 ? Math.floor(s / 86400) + 'd ' : ''}${Math.floor(s % 86400 / 3600)}h ${Math.floor(s % 3600 / 60)}m left`; });
+cd(); setInterval(cd, 30000);
+globalSearch.oninput = e => document.querySelectorAll('.poll-card').forEach(c => c.style.display = c.dataset.text.includes(e.target.value.toLowerCase()) ? '' : 'none');
+</script>
+{% endblock %}

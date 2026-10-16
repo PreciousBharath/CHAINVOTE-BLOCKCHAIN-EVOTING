@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block subheading %}A genesis block is mined the moment you publish{% endblock %}
+{% block content %}
+<div class="grid g-2-1">
+  <form class="card glow fade-up" method="post" id="f">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field"><label>Question</label><input class="input" name="title" id="title" required minlength="4" maxlength="150" placeholder="What should we vote on?"></div>
+    <div class="field"><label>Description (optional)</label><textarea name="description" rows="2" placeholder="Context for voters"></textarea></div>
+    <label>Options</label>
+    <div id="opts"></div>
+    <button type="button" class="btn btn-ghost btn-sm mb" id="addOpt"><i class="bi bi-plus"></i> Add option</button>
+    <div class="grid g2">
+      <div class="field"><label>Voting duration</label><select name="hours"><option value="1">1 hour</option><option value="6">6 hours</option><option value="24" selected>24 hours</option><option value="72">3 days</option><option value="168">1 week</option><option value="720">30 days</option></select></div>
+      <div class="field"><label>Visibility</label><label class="check" style="margin-top:12px"><input type="checkbox" name="public" checked> List publicly (otherwise code-only)</label></div>
+    </div>
+    <button class="btn btn-primary btn-block"><i class="bi bi-hammer"></i> Publish & mine genesis block</button>
+  </form>
+  <div class="card fade-up"><h3><i class="bi bi-eye"></i> Live preview</h3>
+    <h3 id="pvTitle" style="font-size:18px">Your question</h3><div id="pv"></div>
+    <div class="divider"></div>
+    <div class="small muted"><i class="bi bi-shield-check"></i> Ballots are stored as <code>sha256(secret · user · poll)</code> → anonymous yet unique. Each block references the previous block's hash, so editing any vote breaks the chain.</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const opts = document.getElementById('opts');
+const add = (v = '') => { if (opts.children.length >= 10) return toast('Maximum 10 options', 'warning');
+  const d = document.createElement('div'); d.className = 'row mb pop';
+  d.innerHTML = `<span class="badge accent">${opts.children.length + 1}</span><input class="input" name="option" style="flex:1" placeholder="Option text" value="${esc(v)}"><button type="button" class="icon-btn rm"><i class="bi bi-trash"></i></button>`;
+  opts.appendChild(d); renum(); };
+const renum = () => { [...opts.children].forEach((c, i) => c.querySelector('.badge').textContent = i + 1); preview(); };
+const preview = () => { pvTitle.textContent = title.value || 'Your question';
+  pv.innerHTML = [...opts.querySelectorAll('input')].map((i, k) => `<div class="list-item" style="border:1px solid var(--border);margin-bottom:8px"><span class="badge">${k + 1}</span><b class="small">${esc(i.value || 'Option ' + (k + 1))}</b></div>`).join(''); };
+opts.addEventListener('click', e => { if (e.target.closest('.rm') && opts.children.length > 2) { e.target.closest('.row').remove(); renum(); } });
+opts.addEventListener('input', preview); title.addEventListener('input', preview);
+addOpt.onclick = () => add(); add('Option A'); add('Option B');
+</script>
+{% endblock %}

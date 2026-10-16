@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block subheading %}Every block of “{{ p.title[:50] }}” — re-verified on every page load{% endblock %}
+{% block head %}
+<style>
+.chain{display:flex;gap:0;overflow-x:auto;padding:10px 4px 20px;align-items:center}
+.blk{min-width:230px;padding:16px;border-radius:18px;background:var(--card-solid);border:1px solid var(--border);font-size:12px;position:relative;transition:.3s}
+.blk:hover{transform:translateY(-6px);border-color:var(--a1);box-shadow:var(--shadow)}
+.blk.bad{border-color:var(--danger);box-shadow:0 0 0 2px color-mix(in srgb,var(--danger) 35%,transparent)}
+.blk .n{font-size:20px;font-weight:700}
+.blk code{display:block;word-break:break-all;color:var(--muted);margin:2px 0 8px}
+.link{min-width:44px;height:3px;background:var(--grad);position:relative}.link::after{content:"";position:absolute;right:-2px;top:-5px;border:6px solid transparent;border-left-color:var(--a2)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="row mb">
+  <select onchange="location.href='/explorer/'+this.value" style="max-width:420px">{% for a in allp %}<option value="{{ a.code }}" {{ 'selected' if a.code == p.code }}>{{ a.code }} — {{ a.title[:50] }}</option>{% endfor %}</select>
+  <span class="badge {{ 'success' if ok else 'danger' }}" style="padding:8px 14px"><i class="bi {{ 'bi-shield-check' if ok else 'bi-shield-x' }}"></i> {{ 'Chain integrity verified' if ok else 'Tampering detected in blocks ' ~ bad|join(', ') }}</span>
+  <span class="badge"><i class="bi bi-boxes"></i> {{ n }} blocks</span><span class="badge"><i class="bi bi-speedometer"></i> Difficulty {{ difficulty }} (hash starts with {{ '0' * difficulty }})</span>
+</div>
+<div class="card fade-up"><h3><i class="bi bi-link"></i> Chain (latest first)</h3>
+  <div class="chain">
+    {% for b in blocks[:12] %}
+    <div class="blk {{ 'bad' if b.idx in bad }}">
+      <div class="row between"><span class="n gradient-text">#{{ b.idx }}</span><span class="badge {{ 'accent' if b.voter_hash == 'GENESIS' else '' }}">{{ 'Genesis' if b.voter_hash == 'GENESIS' else 'Ballot' }}</span></div>
+      <span class="muted">Hash</span><code>{{ b.hash }}</code>
+      <span class="muted">Previous</span><code>{{ b.prev_hash[:32] }}…</code>
+      <div class="row between"><span>nonce <b>{{ '{:,}'.format(b.nonce) }}</b></span><span class="muted">{{ b.timestamp[11:16] }}</span></div>
+    </div>{% if not loop.last %}<div class="link"></div>{% endif %}
+    {% endfor %}
+  </div>
+</div>
+<div class="card mt fade-up"><h3><i class="bi bi-table"></i> Ledger</h3>
+  <table class="table"><thead><tr><th>#</th><th>Timestamp</th><th>Voter hash (anonymous)</th><th>Ballot</th><th>Nonce</th><th>Block hash</th></tr></thead><tbody>
+  {% for b in blocks %}<tr><td><b>{{ b.idx }}</b></td><td class="small muted">{{ b.timestamp }}</td><td><code class="small">{{ b.voter_hash[:20] }}{{ '…' if b.voter_hash|length > 20 }}</code></td>
+    <td>{% if b.choice >= 0 %}<span class="badge">{{ p.options[b.choice] }}</span>{% else %}—{% endif %}</td><td>{{ '{:,}'.format(b.nonce) }}</td><td><code class="small">{{ b.hash[:24] }}…</code></td></tr>{% endfor %}
+  </tbody></table></div>
+{% endblock %}
